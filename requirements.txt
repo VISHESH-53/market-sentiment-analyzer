@@ -1,0 +1,13 @@
+yfinance
+textblob
+sqlalchemy
+pandas
+matplotlib
+streamlit
+mysql-connector-python
+beautifulsoup4
+requests
+altair
+newsapi-python
+plotly
+schedule

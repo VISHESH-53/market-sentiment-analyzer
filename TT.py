@@ -1,7 +1,7 @@
-# Quantitative Market Sentiment Analyzer with MySQL & Streamlit Dashboard
+# Quantitative Market Sentiment Analyzer with SQLite & Streamlit Dashboard
 
 # --- SETUP ---
-# pip install yfinance textblob sqlalchemy pandas matplotlib streamlit mysql-connector-python beautifulsoup4 requests altair newsapi-python plotly schedule
+# pip install yfinance textblob sqlalchemy pandas matplotlib streamlit beautifulsoup4 requests altair newsapi-python plotly schedule
 
 import yfinance as yf
 import pandas as pd
@@ -21,14 +21,14 @@ STOCKS = st.sidebar.multiselect("Select stocks:", ['AAPL', 'MSFT', 'TSLA', 'GOOG
 START_DATE = st.sidebar.date_input("Start Date", datetime.now() - timedelta(days=30))
 END_DATE = st.sidebar.date_input("End Date", datetime.now())
 
-# --- MySQL Database URI ---
-DB_URI = 'mysql+mysqlconnector://root:vishu@localhost:3306/stock_analysis'
+# --- SQLite Database URI ---
+DB_URI = 'sqlite:///stock_analysis.db'
 engine = sqlalchemy.create_engine(DB_URI)
 
-# --- Reset tables (DEV ONLY) ---
-with engine.connect() as conn:
-    conn.execute(sqlalchemy.text("DROP TABLE IF EXISTS stock_prices"))
-    conn.execute(sqlalchemy.text("DROP TABLE IF EXISTS stock_news"))
+# --- OPTIONAL: Reset tables during development ---
+# with engine.connect() as conn:
+#     conn.execute(sqlalchemy.text("DROP TABLE IF EXISTS stock_prices"))
+#     conn.execute(sqlalchemy.text("DROP TABLE IF EXISTS stock_news"))
 
 # --- 1. FETCH STOCK DATA ---
 def fetch_stock_data(ticker):
@@ -145,7 +145,7 @@ for stock in STOCKS:
     else:
         st.warning("No news data found for pie chart.")
 
-# Background scheduler to update data daily (active)
+# --- OPTIONAL: Daily scheduler (disabled for Streamlit Share) ---
 def job():
     for stock in STOCKS:
         df = fetch_stock_data(stock)
@@ -161,5 +161,7 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(60)
 
-# Uncomment to run scheduler inside app
+# Uncomment to run inside app (for local use only)
 # run_scheduler()
+
+# --- END ---

@@ -1,5 +1,3 @@
-# Quantitative Market Sentiment Analyzer with SQLite & Streamlit Dashboard
-
 # --- SETUP ---
 # pip install yfinance textblob sqlalchemy pandas matplotlib streamlit beautifulsoup4 requests altair newsapi-python plotly schedule
 
@@ -17,20 +15,30 @@ import schedule
 import time
 
 # --- CONFIG ---
+st.set_page_config(page_title="Market Sentiment Analyzer", layout="wide")
+
+# --- Sidebar Controls ---
 STOCKS = st.sidebar.multiselect("Select stocks:", ['AAPL', 'MSFT', 'TSLA', 'GOOGL', 'AMZN'], default=['AAPL', 'MSFT', 'TSLA'])
 START_DATE = st.sidebar.date_input("Start Date", datetime.now() - timedelta(days=30))
 END_DATE = st.sidebar.date_input("End Date", datetime.now())
 
-# --- SQLite Database URI ---
+# --- Database URI ---
 DB_URI = 'sqlite:///stock_analysis.db'
 engine = sqlalchemy.create_engine(DB_URI)
 
-# --- OPTIONAL: Reset tables during development ---
-# with engine.connect() as conn:
-#     conn.execute(sqlalchemy.text("DROP TABLE IF EXISTS stock_prices"))
-#     conn.execute(sqlalchemy.text("DROP TABLE IF EXISTS stock_news"))
+# --- Market Indices ---
+MARKET_INDICES = {
+    "VIX": "^VIX",
+    "NIFTY 50": "^NSEI",
+    "SENSEX": "^BSESN",
+    "S&P 500": "^GSPC",
+    "NASDAQ": "^IXIC"
+}
 
-# --- 1. FETCH STOCK DATA ---
+# --- News API ---
+newsapi = NewsApiClient(api_key='85ee2bd2e1154ca9b865f97ebf666a77') 
+
+# --- 1. Fetch Stock Data ---
 def fetch_stock_data(ticker):
     data = yf.download(ticker, start=START_DATE, end=END_DATE, auto_adjust=False)
     data.reset_index(inplace=True)
@@ -38,13 +46,11 @@ def fetch_stock_data(ticker):
     data['Ticker'] = ticker
     return data
 
-# --- 2. STORE IN DATABASE ---
+# --- 2. Store in SQLite DB ---
 def store_to_db(df, table_name):
     df.to_sql(table_name, engine, if_exists='append', index=False, method='multi')
 
-# --- 3. REAL NEWS & SENTIMENT ANALYSIS ---
-newsapi = NewsApiClient(api_key='85ee2bd2e1154ca9b865f97ebf666a77') 
-
+# --- 3. Fetch News + Sentiment ---
 def fetch_real_news(ticker):
     try:
         articles = newsapi.get_everything(
@@ -60,9 +66,29 @@ def fetch_real_news(ticker):
         print(f"❌ Failed to fetch news for {ticker}: {e}")
         return pd.DataFrame(columns=['Ticker', 'Headline', 'Sentiment'])
 
+# --- 4. Fetch Market Index Data ---
+def fetch_index_data(symbol_dict, start_date, end_date):
+    index_df = pd.DataFrame()
+    for name, symbol in symbol_dict.items():
+        df = yf.download(symbol, start=start_date, end=end_date)[['Close']]
+        df.rename(columns={"Close": name}, inplace=True)
+        index_df = pd.concat([index_df, df], axis=1)
+    index_df.dropna(inplace=True)
+    return index_df
+
+# --- 5. Generate Dummy Sentiment Series (replace with DB avg later) ---
+def generate_dummy_sentiment_series(start_date, end_date):
+    sentiment_series = pd.DataFrame({
+        "Date": pd.date_range(start=start_date, end=end_date, freq="D"),
+        "Sentiment": [0.1 * (i % 10 - 5) for i in range((end_date - start_date).days + 1)]
+    })
+    sentiment_series.set_index("Date", inplace=True)
+    return sentiment_series
+
 # --- MAIN FLOW ---
-all_data = []
-all_sentiment = []
+st.title("📈 Quantitative Market Sentiment Analyzer")
+
+all_data, all_sentiment = [], []
 
 for stock in STOCKS:
     df = fetch_stock_data(stock)
@@ -73,16 +99,12 @@ for stock in STOCKS:
     all_sentiment.append(sent_df)
     store_to_db(sent_df, 'stock_news')
 
-# --- STREAMLIT DASHBOARD ---
-st.set_page_config(page_title="Market Sentiment Analyzer", layout="wide")
-st.title("📈 Quantitative Market Sentiment Analyzer")
-
-# Load Data from DB
+# --- Load Data from SQLite ---
 stock_prices = pd.read_sql("SELECT * FROM stock_prices", engine)
 stock_news = pd.read_sql("SELECT * FROM stock_news", engine)
 
-# Show price chart
-st.subheader("Stock Prices Over Time")
+# --- STOCK PRICE CHARTS ---
+st.subheader("📉 Stock Prices Over Time")
 for stock in STOCKS:
     subset = stock_prices[stock_prices['Ticker'] == stock]
     if not subset.empty:
@@ -92,8 +114,8 @@ for stock in STOCKS:
     else:
         st.warning(f"No price data available for {stock}.")
 
-# Show sentiment analysis
-st.subheader("Sentiment Analysis of Latest News")
+# --- SENTIMENT ANALYSIS ---
+st.subheader("🧠 Sentiment Analysis of Latest News")
 for stock in STOCKS:
     st.markdown(f"**{stock}**")
     news = stock_news[stock_news['Ticker'] == stock][['Headline', 'Sentiment']]
@@ -108,7 +130,7 @@ for stock in STOCKS:
     else:
         st.warning("No news data found.")
 
-# Avg Sentiment per Stock - Bar Chart
+# --- AVERAGE SENTIMENT BAR CHART ---
 st.subheader("📊 Average Sentiment per Stock")
 avg_sentiment = stock_news.groupby("Ticker")["Sentiment"].mean().reset_index()
 if not avg_sentiment.empty:
@@ -117,7 +139,7 @@ if not avg_sentiment.empty:
 else:
     st.info("No sentiment data available for average sentiment chart.")
 
-# Pie Chart of Sentiment Categories
+# --- SENTIMENT PIE CHARTS ---
 st.subheader("🥧 Sentiment Category Distribution")
 for stock in STOCKS:
     st.markdown(f"**{stock}**")
@@ -145,7 +167,25 @@ for stock in STOCKS:
     else:
         st.warning("No news data found for pie chart.")
 
-# --- OPTIONAL: Daily scheduler (disabled for Streamlit Share) ---
+# --- MARKET RISK ANALYSIS SECTION ---
+st.subheader("📉 Market Indices vs Sentiment Score")
+
+# Fetch market index data and dummy sentiment
+index_df = fetch_index_data(MARKET_INDICES, START_DATE, END_DATE)
+sentiment_series = generate_dummy_sentiment_series(START_DATE, END_DATE)
+
+# Combine and normalize
+combined_df = pd.merge(index_df, sentiment_series, left_index=True, right_index=True, how='inner')
+normalized_df = combined_df.copy()
+for col in combined_df.columns:
+    normalized_df[col] = (combined_df[col] - combined_df[col].min()) / (combined_df[col].max() - combined_df[col].min())
+
+# Plot with Plotly
+fig = px.line(normalized_df.reset_index(), x='Date', y=normalized_df.columns,
+              title="Normalized Market Indices vs Sentiment Score")
+st.plotly_chart(fig, use_container_width=True)
+
+# --- OPTIONAL: Background Job for Daily Refresh ---
 def job():
     for stock in STOCKS:
         df = fetch_stock_data(stock)
@@ -161,7 +201,5 @@ def run_scheduler():
         schedule.run_pending()
         time.sleep(60)
 
-# Uncomment to run inside app (for local use only)
+# Uncomment below line for local background jobs
 # run_scheduler()
-
-# --- END ---

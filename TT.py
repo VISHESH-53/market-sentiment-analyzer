@@ -76,14 +76,19 @@ def fetch_index_data(symbol_dict, start_date, end_date):
     index_df.dropna(inplace=True)
     return index_df
 
-# --- 5. Generate Dummy Sentiment Series (replace with DB avg later) ---
-def generate_dummy_sentiment_series(start_date, end_date):
-    sentiment_series = pd.DataFrame({
-        "Date": pd.date_range(start=start_date, end=end_date, freq="D"),
-        "Sentiment": [0.1 * (i % 10 - 5) for i in range((end_date - start_date).days + 1)]
-    })
-    sentiment_series.set_index("Date", inplace=True)
-    return sentiment_series
+# --- 5. Fetch Real Sentiment Series from DB ---
+def fetch_sentiment_series_from_db(start_date, end_date):
+    query = f"""
+        SELECT date(Date) as Date, AVG(Sentiment) as Sentiment
+        FROM stock_news
+        WHERE date(Date) BETWEEN '{start_date}' AND '{end_date}'
+        GROUP BY date(Date)
+        ORDER BY Date
+    """
+    sentiment_df = pd.read_sql(query, engine)
+    sentiment_df['Date'] = pd.to_datetime(sentiment_df['Date'])
+    sentiment_df.set_index("Date", inplace=True)
+    return sentiment_df
 
 # --- MAIN FLOW ---
 st.title("📈 Quantitative Market Sentiment Analyzer")
@@ -170,20 +175,23 @@ for stock in STOCKS:
 # --- MARKET RISK ANALYSIS SECTION ---
 st.subheader("📉 Market Indices vs Sentiment Score")
 
-# Fetch market index data and dummy sentiment
+# Fetch market index data and sentiment from DB
 index_df = fetch_index_data(MARKET_INDICES, START_DATE, END_DATE)
-sentiment_series = generate_dummy_sentiment_series(START_DATE, END_DATE)
+sentiment_series = fetch_sentiment_series_from_db(START_DATE, END_DATE)
 
 # Combine and normalize
-combined_df = pd.merge(index_df, sentiment_series, left_index=True, right_index=True, how='inner')
-normalized_df = combined_df.copy()
-for col in combined_df.columns:
-    normalized_df[col] = (combined_df[col] - combined_df[col].min()) / (combined_df[col].max() - combined_df[col].min())
+if not sentiment_series.empty and not index_df.empty:
+    combined_df = pd.merge(index_df, sentiment_series, left_index=True, right_index=True, how='inner')
+    normalized_df = combined_df.copy()
+    for col in combined_df.columns:
+        normalized_df[col] = (combined_df[col] - combined_df[col].min()) / (combined_df[col].max() - combined_df[col].min())
 
-# Plot with Plotly
-fig = px.line(normalized_df.reset_index(), x='Date', y=normalized_df.columns,
-              title="Normalized Market Indices vs Sentiment Score")
-st.plotly_chart(fig, use_container_width=True)
+    # Plot
+    fig = px.line(normalized_df.reset_index(), x='Date', y=normalized_df.columns,
+                  title="Normalized Market Indices vs Sentiment Score")
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("Not enough sentiment or index data to show comparative analysis.")
 
 # --- OPTIONAL: Background Job for Daily Refresh ---
 def job():

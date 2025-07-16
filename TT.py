@@ -1,4 +1,4 @@
-# Quantitative Market Sentiment Analyzer — Debugged Version
+# Quantitative Market Sentiment Analyzer — Debugged Version (with hardcoded API key)
 
 import yfinance as yf
 import pandas as pd
@@ -19,16 +19,12 @@ START_DATE = st.sidebar.date_input("Start Date", datetime.now() - timedelta(days
 END_DATE = st.sidebar.date_input("End Date", datetime.now())
 
 # --- NEWS API KEY ---
-NEWS_API_KEY = st.sidebar.text_input("Enter News API Key:", type="password")
-if not NEWS_API_KEY:
-    st.warning("Please enter a valid News API key to access news sentiment analysis.")
+NEWS_API_KEY = "85ee2bd2e1154ca9b865f97ebf666a77"
+try:
+    newsapi = NewsApiClient(api_key=NEWS_API_KEY)
+except Exception as e:
+    st.error(f"Failed to initialize News API client: {str(e)}")
     newsapi = None
-else:
-    try:
-        newsapi = NewsApiClient(api_key=NEWS_API_KEY)
-    except Exception as e:
-        st.error(f"Failed to initialize News API client: {str(e)}")
-        newsapi = None
 
 # --- UTILITY FUNCTIONS ---
 def fetch_stock_data(ticker):
@@ -120,8 +116,6 @@ if newsapi:
                 st.info(f"No news data found for {stock}.")
     else:
         st.info("No news sentiment data available.")
-else:
-    st.warning("News sentiment analysis requires a valid News API key.")
 
 # --- AVERAGE SENTIMENT BAR ---
 if newsapi and not stock_news.empty:

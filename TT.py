@@ -26,10 +26,15 @@ newsapi = NewsApiClient(api_key=NEWS_API_KEY)
 
 # --- UTILITY FUNCTIONS ---
 def fetch_stock_data(ticker):
-    df = yf.download(ticker, start=START_DATE, end=END_DATE)[['Open', 'High', 'Low', 'Close', 'Volume']]
+    df = yf.download(ticker, start=START_DATE, end=END_DATE)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)  # Flatten MultiIndex
+
+    df = df[['Open', 'High', 'Low', 'Close', 'Volume']]  # Select only required columns
     df.reset_index(inplace=True)
     df['Ticker'] = ticker
     return df
+
 
 def fetch_news_sentiment(ticker):
     try:

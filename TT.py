@@ -21,7 +21,7 @@ START_DATE = st.sidebar.date_input("Start Date", datetime.now() - timedelta(days
 END_DATE = st.sidebar.date_input("End Date", datetime.now())
 
 # --- NEWS API KEY (Replace with your key) ---
-NEWS_API_KEY = "85ee2bd2e1154ca9b865f97ebf666a77"
+NEWS_API_KEY = "02b6b05c148645eab57c843d788cc094"
 newsapi = NewsApiClient(api_key=NEWS_API_KEY)
 
 # --- UTILITY FUNCTIONS ---
